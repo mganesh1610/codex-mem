@@ -1,0 +1,36 @@
+{
+  "name": "codex-mem",
+  "version": "0.1.0",
+  "description": "Local-first cross-session memory search for Codex using existing session transcripts.",
+  "author": {
+    "name": "Ganeshkumar Marimuthu"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "memory",
+    "sessions",
+    "search",
+    "local-first"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks.json",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Mem",
+    "shortDescription": "Search previous Codex sessions from local transcript history.",
+    "longDescription": "Codex Mem builds a lightweight local index over ~/.codex/sessions, exposes MCP tools for search and drill-down, and refreshes the index at session boundaries.",
+    "developerName": "Ganeshkumar Marimuthu",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Search my earlier Codex sessions for how we solved this before.",
+      "Show recent sessions related to this working directory.",
+      "Open the details for the session where we discussed this bug."
+    ],
+    "brandColor": "#0F766E"
+  }
+}

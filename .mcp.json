@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "codex-mem": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "./scripts/mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}
