@@ -1,7 +1,7 @@
 {
   "name": "codex-mem",
-  "version": "0.2.0",
-  "description": "Local-first hybrid memory search for Codex with SQLite, optional Chroma, and project-group memory.",
+  "version": "0.3.0",
+  "description": "Local-first project memory for Codex with SQLite, Chroma, transcript snippets, and Obsidian markdown export.",
   "author": {
     "name": "Ganeshkumar Marimuthu"
   },
@@ -18,8 +18,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Mem",
-    "shortDescription": "Hybrid Codex memory with SQLite, Chroma, and merged project groups.",
-    "longDescription": "Codex Mem builds a local memory system over ~/.codex/sessions, supports fast SQLite retrieval, optional Chroma semantic search, project-group memory merging, and startup context lookup.",
+    "shortDescription": "Project memory for Codex with hybrid search, exact snippets, and Obsidian notes.",
+    "longDescription": "Codex Mem builds a local project-memory system over ~/.codex/sessions with fast SQLite retrieval, optional Chroma semantic search, exact transcript snippet search, project-group recall, last-time summaries, and automatic Obsidian-compatible markdown export.",
     "developerName": "Ganeshkumar Marimuthu",
     "category": "Productivity",
     "capabilities": [
@@ -27,9 +27,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Search my earlier Codex sessions for how we solved this before.",
-      "Show startup context for this working directory before I begin.",
-      "Run hybrid memory search to find semantically related past work."
+      "Show related sessions for this working directory before I begin.",
+      "Find the exact snippet where we hit this error and give me the Obsidian note link.",
+      "Summarize what we decided last time for this project."
     ],
     "brandColor": "#0F766E"
   }

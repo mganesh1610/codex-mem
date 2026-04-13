@@ -12,15 +12,18 @@ from memory_store import (
     list_project_groups,
     memory_status,
     recent_sessions,
+    related_sessions,
     rebuild_index,
+    search_transcript_snippets,
     search_sessions,
+    summarize_last_time,
     write_project_groups_example,
 )
 
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "codex-mem"
-SERVER_VERSION = "0.2.0"
+SERVER_VERSION = "0.3.0"
 
 
 TOOLS = [
@@ -35,6 +38,10 @@ TOOLS = [
                 "cwd_contains": {"type": "string", "description": "Optional working-directory substring filter."},
                 "days": {"type": "integer", "minimum": 1, "description": "Optional lookback window in days."},
                 "project_group": {"type": "string", "description": "Optional merged project group or alias."},
+                "tool_name": {"type": "string", "description": "Optional tool filter such as shell_command or apply_patch."},
+                "file_contains": {"type": "string", "description": "Optional file path/name filter."},
+                "command_contains": {"type": "string", "description": "Optional shell command substring filter."},
+                "error_contains": {"type": "string", "description": "Optional error substring filter."},
             },
             "required": ["query"],
         },
@@ -50,6 +57,10 @@ TOOLS = [
                 "cwd_contains": {"type": "string", "description": "Optional working-directory substring filter."},
                 "days": {"type": "integer", "minimum": 1, "description": "Optional lookback window in days."},
                 "project_group": {"type": "string", "description": "Optional merged project group or alias."},
+                "tool_name": {"type": "string", "description": "Optional tool filter such as shell_command or apply_patch."},
+                "file_contains": {"type": "string", "description": "Optional file path/name filter."},
+                "command_contains": {"type": "string", "description": "Optional shell command substring filter."},
+                "error_contains": {"type": "string", "description": "Optional error substring filter."},
             },
             "required": ["query"],
         },
@@ -63,6 +74,10 @@ TOOLS = [
                 "limit": {"type": "integer", "minimum": 1, "maximum": 25, "default": 10},
                 "cwd_contains": {"type": "string", "description": "Optional working-directory substring filter."},
                 "project_group": {"type": "string", "description": "Optional merged project group or alias."},
+                "tool_name": {"type": "string", "description": "Optional tool filter such as shell_command or apply_patch."},
+                "file_contains": {"type": "string", "description": "Optional file path/name filter."},
+                "command_contains": {"type": "string", "description": "Optional shell command substring filter."},
+                "error_contains": {"type": "string", "description": "Optional error substring filter."},
             },
         },
     },
@@ -88,7 +103,64 @@ TOOLS = [
                 "query": {"type": "string", "description": "Optional natural-language task description."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
                 "project_group": {"type": "string", "description": "Optional merged project group or alias."},
+                "tool_name": {"type": "string", "description": "Optional tool filter such as shell_command or apply_patch."},
+                "file_contains": {"type": "string", "description": "Optional file path/name filter."},
+                "command_contains": {"type": "string", "description": "Optional shell command substring filter."},
+                "error_contains": {"type": "string", "description": "Optional error substring filter."},
             },
+        },
+    },
+    {
+        "name": "related_sessions",
+        "description": "Show the most relevant sessions for the current folder or merged project group.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cwd": {"type": "string", "description": "Current working directory."},
+                "query": {"type": "string", "description": "Optional natural-language task description."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
+                "project_group": {"type": "string", "description": "Optional merged project group or alias."},
+                "tool_name": {"type": "string", "description": "Optional tool filter such as shell_command or apply_patch."},
+                "file_contains": {"type": "string", "description": "Optional file path/name filter."},
+                "command_contains": {"type": "string", "description": "Optional shell command substring filter."},
+                "error_contains": {"type": "string", "description": "Optional error substring filter."},
+            },
+        },
+    },
+    {
+        "name": "search_transcript_snippets",
+        "description": "Search exact transcript snippets and return the matching text plus transcript and Obsidian links.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Optional keyword or phrase to find in transcript text."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25, "default": 10},
+                "cwd_contains": {"type": "string", "description": "Optional working-directory substring filter."},
+                "days": {"type": "integer", "minimum": 1, "description": "Optional lookback window in days."},
+                "project_group": {"type": "string", "description": "Optional merged project group or alias."},
+                "tool_name": {"type": "string", "description": "Optional tool filter such as shell_command or apply_patch."},
+                "file_contains": {"type": "string", "description": "Optional file path/name filter."},
+                "command_contains": {"type": "string", "description": "Optional shell command substring filter."},
+                "error_contains": {"type": "string", "description": "Optional error substring filter."},
+                "error_only": {"type": "boolean", "description": "Restrict results to error-like transcript lines."}
+            }
+        },
+    },
+    {
+        "name": "summarize_last_time",
+        "description": "Summarize what was decided last time for a folder, project group, or task.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cwd": {"type": "string", "description": "Current working directory."},
+                "query": {"type": "string", "description": "Optional natural-language task description."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
+                "project_group": {"type": "string", "description": "Optional merged project group or alias."},
+                "tool_name": {"type": "string", "description": "Optional tool filter such as shell_command or apply_patch."},
+                "file_contains": {"type": "string", "description": "Optional file path/name filter."},
+                "command_contains": {"type": "string", "description": "Optional shell command substring filter."},
+                "error_contains": {"type": "string", "description": "Optional error substring filter."}
+            }
         },
     },
     {
@@ -130,6 +202,19 @@ def parse_project_groups(raw_value: Any) -> list[str]:
     return []
 
 
+def parse_string_list(raw_value: Any) -> list[str]:
+    if isinstance(raw_value, list):
+        return [str(item) for item in raw_value if str(item).strip()]
+    if isinstance(raw_value, str):
+        try:
+            decoded = json.loads(raw_value)
+            if isinstance(decoded, list):
+                return [str(item) for item in decoded if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+    return []
+
+
 def unique_preserve_order(items: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -148,6 +233,9 @@ def format_session_rows(rows: list[dict[str, Any]], show_scores: bool = False) -
     for row in rows:
         tool_names = parse_tool_names(row.get("tool_names"))
         project_groups = parse_project_groups(row.get("project_groups"))
+        files_touched = parse_string_list(row.get("files_touched"))
+        commands_seen = parse_string_list(row.get("commands_seen"))
+        error_signatures = parse_string_list(row.get("error_signatures"))
         lines.append(f"session_id: {row['session_id']}")
         lines.append(f"started_at: {row.get('started_at') or ''}")
         lines.append(f"cwd: {row.get('cwd') or ''}")
@@ -156,11 +244,21 @@ def format_session_rows(rows: list[dict[str, Any]], show_scores: bool = False) -
             lines.append(f"project_groups: {', '.join(project_groups)}")
         if tool_names:
             lines.append(f"tools: {', '.join(tool_names)}")
+        if files_touched:
+            lines.append(f"files: {', '.join(files_touched[:5])}")
+        if commands_seen:
+            lines.append(f"commands: {', '.join(commands_seen[:3])}")
+        if error_signatures:
+            lines.append(f"errors: {', '.join(error_signatures[:3])}")
+        if row.get("decision_summary"):
+            lines.append(f"decision: {row['decision_summary']}")
         if show_scores:
             if row.get("search_sources"):
                 lines.append(f"search_sources: {', '.join(row['search_sources'])}")
             if row.get("hybrid_score") is not None:
                 lines.append(f"hybrid_score: {float(row['hybrid_score']):.4f}")
+        if row.get("obsidian_uri"):
+            lines.append(f"obsidian_uri: {row['obsidian_uri']}")
         if row.get("summary"):
             lines.append(f"summary: {row['summary']}")
         lines.append("")
@@ -171,6 +269,10 @@ def format_session_detail(payload: dict[str, Any] | None) -> str:
     if payload is None:
         return "Session not found."
     project_groups = parse_project_groups(payload.get("project_groups"))
+    tool_names = parse_string_list(payload.get("tool_names"))
+    files_touched = parse_string_list(payload.get("files_touched"))
+    commands_seen = parse_string_list(payload.get("commands_seen"))
+    error_signatures = parse_string_list(payload.get("error_signatures"))
     lines = [
         f"session_id: {payload['session_id']}",
         f"started_at: {payload.get('started_at') or ''}",
@@ -179,10 +281,25 @@ def format_session_detail(payload: dict[str, Any] | None) -> str:
         f"model: {payload.get('model') or ''}",
         f"title: {payload.get('title') or ''}",
         f"summary: {payload.get('summary') or ''}",
+        f"decision_summary: {payload.get('decision_summary') or ''}",
         f"message_count: {payload.get('total_messages') or 0}",
     ]
     if project_groups:
         lines.append(f"project_groups: {', '.join(project_groups)}")
+    if tool_names:
+        lines.append(f"tools: {', '.join(tool_names)}")
+    if files_touched:
+        lines.append(f"files: {', '.join(files_touched)}")
+    if commands_seen:
+        lines.append(f"commands: {', '.join(commands_seen)}")
+    if error_signatures:
+        lines.append(f"errors: {', '.join(error_signatures)}")
+    if payload.get("file_path"):
+        lines.append(f"transcript_path: {payload['file_path']}")
+    if payload.get("obsidian_note_path"):
+        lines.append(f"obsidian_note_path: {payload['obsidian_note_path']}")
+    if payload.get("obsidian_uri"):
+        lines.append(f"obsidian_uri: {payload['obsidian_uri']}")
     lines.extend(["", "messages:"])
     for message in payload.get("messages", []):
         prefix = f"{message['ordinal']:03d} {message['role']}/{message['kind']}"
@@ -208,6 +325,7 @@ def format_project_groups(groups: list[dict[str, Any]]) -> str:
 
 def format_status(payload: dict[str, Any]) -> str:
     chroma = payload.get("chroma", {})
+    obsidian = payload.get("obsidian", {})
     lines = [
         f"total_sessions: {payload.get('total_sessions')}",
         f"total_messages: {payload.get('total_messages')}",
@@ -229,6 +347,18 @@ def format_status(payload: dict[str, Any]) -> str:
         lines.append(f"  host: {chroma['host']}:{chroma.get('port')}")
     if chroma.get("error"):
         lines.append(f"  error: {chroma['error']}")
+    lines.extend(
+        [
+            "",
+            "obsidian:",
+            f"  enabled: {obsidian.get('enabled')}",
+            f"  vault_path: {obsidian.get('vault_path') or ''}",
+            f"  folder: {obsidian.get('folder') or ''}",
+            f"  root_path: {obsidian.get('root_path') or ''}",
+            f"  index_path: {obsidian.get('index_path') or ''}",
+            f"  note_count: {obsidian.get('note_count')}",
+        ]
+    )
     return "\n".join(lines).strip()
 
 
@@ -256,8 +386,54 @@ def build_startup_brief(payload: dict[str, Any]) -> str:
             for session in sessions[1:3]
         ]
         lines.append(f"Also relevant: {'; '.join(related_titles)}.")
+    if lead.get("decision_summary"):
+        lines.append(f"Latest decision: {lead['decision_summary']}.")
     lines.append(f"Next step: inspect session {lead.get('session_id')} for full context.")
     return " ".join(lines)
+
+
+def format_snippet_rows(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "No matching transcript snippets."
+    lines: list[str] = []
+    for row in rows:
+        lines.append(f"session_id: {row['session_id']}")
+        lines.append(f"started_at: {row.get('started_at') or ''}")
+        lines.append(f"title: {row.get('title') or ''}")
+        lines.append(f"message: {row.get('message_ordinal')} {row.get('message_role')}/{row.get('message_kind')}")
+        lines.append(f"snippet: {row.get('snippet') or ''}")
+        if row.get("transcript_path"):
+            lines.append(f"transcript_path: {row['transcript_path']}")
+        if row.get("obsidian_note_path"):
+            lines.append(f"obsidian_note_path: {row['obsidian_note_path']}")
+        if row.get("obsidian_uri"):
+            lines.append(f"obsidian_uri: {row['obsidian_uri']}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def format_last_time(payload: dict[str, Any]) -> str:
+    lines = [
+        f"headline: {payload.get('headline') or ''}",
+        f"project_group: {payload.get('project_group') or ''}",
+        f"lead_session_id: {payload.get('lead_session_id') or ''}",
+    ]
+    if payload.get("lead_obsidian_uri"):
+        lines.append(f"lead_obsidian_uri: {payload['lead_obsidian_uri']}")
+    if payload.get("decision_summary"):
+        lines.append(f"decision_summary: {payload['decision_summary']}")
+    if payload.get("top_tools"):
+        lines.append(f"top_tools: {', '.join(payload['top_tools'])}")
+    if payload.get("top_files"):
+        lines.append(f"top_files: {', '.join(payload['top_files'])}")
+    if payload.get("top_commands"):
+        lines.append(f"top_commands: {', '.join(payload['top_commands'])}")
+    if payload.get("top_errors"):
+        lines.append(f"top_errors: {', '.join(payload['top_errors'])}")
+    lines.append("")
+    lines.append("sessions:")
+    lines.append(format_session_rows(payload.get("sessions", []), show_scores=True))
+    return "\n".join(lines).strip()
 
 
 def format_startup_context(payload: dict[str, Any]) -> str:
@@ -286,6 +462,10 @@ def tool_result(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, An
             cwd_contains=arguments.get("cwd_contains"),
             days=arguments.get("days"),
             project_group=arguments.get("project_group"),
+            tool_name=arguments.get("tool_name"),
+            file_contains=arguments.get("file_contains"),
+            command_contains=arguments.get("command_contains"),
+            error_contains=arguments.get("error_contains"),
         )
         return format_session_rows(rows), {"rows": rows}
     if name == "hybrid_search_sessions":
@@ -295,6 +475,10 @@ def tool_result(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, An
             cwd_contains=arguments.get("cwd_contains"),
             days=arguments.get("days"),
             project_group=arguments.get("project_group"),
+            tool_name=arguments.get("tool_name"),
+            file_contains=arguments.get("file_contains"),
+            command_contains=arguments.get("command_contains"),
+            error_contains=arguments.get("error_contains"),
         )
         return format_session_rows(rows, show_scores=True), {"rows": rows}
     if name == "recent_sessions":
@@ -302,6 +486,10 @@ def tool_result(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, An
             limit=int(arguments.get("limit", 10)),
             cwd_contains=arguments.get("cwd_contains"),
             project_group=arguments.get("project_group"),
+            tool_name=arguments.get("tool_name"),
+            file_contains=arguments.get("file_contains"),
+            command_contains=arguments.get("command_contains"),
+            error_contains=arguments.get("error_contains"),
         )
         return format_session_rows(rows), {"rows": rows}
     if name == "get_session":
@@ -316,9 +504,52 @@ def tool_result(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, An
             query=arguments.get("query"),
             limit=int(arguments.get("limit", 5)),
             project_group=arguments.get("project_group"),
+            tool_name=arguments.get("tool_name"),
+            file_contains=arguments.get("file_contains"),
+            command_contains=arguments.get("command_contains"),
+            error_contains=arguments.get("error_contains"),
         )
         payload["brief"] = build_startup_brief(payload)
         return format_startup_context(payload), payload
+    if name == "related_sessions":
+        payload = related_sessions(
+            cwd=arguments.get("cwd"),
+            query=arguments.get("query"),
+            limit=int(arguments.get("limit", 5)),
+            project_group=arguments.get("project_group"),
+            tool_name=arguments.get("tool_name"),
+            file_contains=arguments.get("file_contains"),
+            command_contains=arguments.get("command_contains"),
+            error_contains=arguments.get("error_contains"),
+        )
+        payload["brief"] = build_startup_brief(payload)
+        return format_startup_context(payload), payload
+    if name == "search_transcript_snippets":
+        rows = search_transcript_snippets(
+            query=arguments.get("query"),
+            limit=int(arguments.get("limit", 10)),
+            cwd_contains=arguments.get("cwd_contains"),
+            days=arguments.get("days"),
+            project_group=arguments.get("project_group"),
+            tool_name=arguments.get("tool_name"),
+            file_contains=arguments.get("file_contains"),
+            command_contains=arguments.get("command_contains"),
+            error_contains=arguments.get("error_contains"),
+            error_only=bool(arguments.get("error_only", False)),
+        )
+        return format_snippet_rows(rows), {"rows": rows}
+    if name == "summarize_last_time":
+        payload = summarize_last_time(
+            cwd=arguments.get("cwd"),
+            query=arguments.get("query"),
+            limit=int(arguments.get("limit", 5)),
+            project_group=arguments.get("project_group"),
+            tool_name=arguments.get("tool_name"),
+            file_contains=arguments.get("file_contains"),
+            command_contains=arguments.get("command_contains"),
+            error_contains=arguments.get("error_contains"),
+        )
+        return format_last_time(payload), payload
     if name == "list_project_groups":
         groups = list_project_groups()
         return format_project_groups(groups), {"groups": groups}
@@ -426,6 +657,10 @@ def build_cli() -> argparse.ArgumentParser:
     search_parser.add_argument("--cwd-contains")
     search_parser.add_argument("--days", type=int)
     search_parser.add_argument("--project-group")
+    search_parser.add_argument("--tool-name")
+    search_parser.add_argument("--file-contains")
+    search_parser.add_argument("--command-contains")
+    search_parser.add_argument("--error-contains")
 
     hybrid_parser = subparsers.add_parser("hybrid-search", help="Hybrid keyword plus Chroma semantic search")
     hybrid_parser.add_argument("query")
@@ -433,11 +668,19 @@ def build_cli() -> argparse.ArgumentParser:
     hybrid_parser.add_argument("--cwd-contains")
     hybrid_parser.add_argument("--days", type=int)
     hybrid_parser.add_argument("--project-group")
+    hybrid_parser.add_argument("--tool-name")
+    hybrid_parser.add_argument("--file-contains")
+    hybrid_parser.add_argument("--command-contains")
+    hybrid_parser.add_argument("--error-contains")
 
     recent_parser = subparsers.add_parser("recent", help="Show recent sessions")
     recent_parser.add_argument("--limit", type=int, default=10)
     recent_parser.add_argument("--cwd-contains")
     recent_parser.add_argument("--project-group")
+    recent_parser.add_argument("--tool-name")
+    recent_parser.add_argument("--file-contains")
+    recent_parser.add_argument("--command-contains")
+    recent_parser.add_argument("--error-contains")
 
     session_parser = subparsers.add_parser("session", help="Show one session")
     session_parser.add_argument("session_id")
@@ -455,6 +698,42 @@ def build_cli() -> argparse.ArgumentParser:
     startup_parser.add_argument("--query")
     startup_parser.add_argument("--limit", type=int, default=5)
     startup_parser.add_argument("--project-group")
+    startup_parser.add_argument("--tool-name")
+    startup_parser.add_argument("--file-contains")
+    startup_parser.add_argument("--command-contains")
+    startup_parser.add_argument("--error-contains")
+
+    related_parser = subparsers.add_parser("related-sessions", help="Show related sessions for the current folder or project group")
+    related_parser.add_argument("--cwd")
+    related_parser.add_argument("--query")
+    related_parser.add_argument("--limit", type=int, default=5)
+    related_parser.add_argument("--project-group")
+    related_parser.add_argument("--tool-name")
+    related_parser.add_argument("--file-contains")
+    related_parser.add_argument("--command-contains")
+    related_parser.add_argument("--error-contains")
+
+    snippets_parser = subparsers.add_parser("search-snippets", help="Search exact transcript snippets")
+    snippets_parser.add_argument("--query")
+    snippets_parser.add_argument("--limit", type=int, default=10)
+    snippets_parser.add_argument("--cwd-contains")
+    snippets_parser.add_argument("--days", type=int)
+    snippets_parser.add_argument("--project-group")
+    snippets_parser.add_argument("--tool-name")
+    snippets_parser.add_argument("--file-contains")
+    snippets_parser.add_argument("--command-contains")
+    snippets_parser.add_argument("--error-contains")
+    snippets_parser.add_argument("--error-only", action="store_true")
+
+    last_time_parser = subparsers.add_parser("summarize-last-time", help="Summarize what was decided last time")
+    last_time_parser.add_argument("--cwd")
+    last_time_parser.add_argument("--query")
+    last_time_parser.add_argument("--limit", type=int, default=5)
+    last_time_parser.add_argument("--project-group")
+    last_time_parser.add_argument("--tool-name")
+    last_time_parser.add_argument("--file-contains")
+    last_time_parser.add_argument("--command-contains")
+    last_time_parser.add_argument("--error-contains")
 
     return parser
 
@@ -482,6 +761,10 @@ def main() -> int:
                 "cwd_contains": args.cwd_contains,
                 "days": args.days,
                 "project_group": args.project_group,
+                "tool_name": args.tool_name,
+                "file_contains": args.file_contains,
+                "command_contains": args.command_contains,
+                "error_contains": args.error_contains,
             },
         )
         print(text)
@@ -496,6 +779,10 @@ def main() -> int:
                 "cwd_contains": args.cwd_contains,
                 "days": args.days,
                 "project_group": args.project_group,
+                "tool_name": args.tool_name,
+                "file_contains": args.file_contains,
+                "command_contains": args.command_contains,
+                "error_contains": args.error_contains,
             },
         )
         print(text)
@@ -508,6 +795,10 @@ def main() -> int:
                 "limit": args.limit,
                 "cwd_contains": args.cwd_contains,
                 "project_group": args.project_group,
+                "tool_name": args.tool_name,
+                "file_contains": args.file_contains,
+                "command_contains": args.command_contains,
+                "error_contains": args.error_contains,
             },
         )
         print(text)
@@ -544,6 +835,63 @@ def main() -> int:
                 "query": args.query,
                 "limit": args.limit,
                 "project_group": args.project_group,
+                "tool_name": args.tool_name,
+                "file_contains": args.file_contains,
+                "command_contains": args.command_contains,
+                "error_contains": args.error_contains,
+            },
+        )
+        print(text)
+        return 0
+
+    if args.command == "related-sessions":
+        text, _ = tool_result(
+            "related_sessions",
+            {
+                "cwd": args.cwd,
+                "query": args.query,
+                "limit": args.limit,
+                "project_group": args.project_group,
+                "tool_name": args.tool_name,
+                "file_contains": args.file_contains,
+                "command_contains": args.command_contains,
+                "error_contains": args.error_contains,
+            },
+        )
+        print(text)
+        return 0
+
+    if args.command == "search-snippets":
+        text, _ = tool_result(
+            "search_transcript_snippets",
+            {
+                "query": args.query,
+                "limit": args.limit,
+                "cwd_contains": args.cwd_contains,
+                "days": args.days,
+                "project_group": args.project_group,
+                "tool_name": args.tool_name,
+                "file_contains": args.file_contains,
+                "command_contains": args.command_contains,
+                "error_contains": args.error_contains,
+                "error_only": args.error_only,
+            },
+        )
+        print(text)
+        return 0
+
+    if args.command == "summarize-last-time":
+        text, _ = tool_result(
+            "summarize_last_time",
+            {
+                "cwd": args.cwd,
+                "query": args.query,
+                "limit": args.limit,
+                "project_group": args.project_group,
+                "tool_name": args.tool_name,
+                "file_contains": args.file_contains,
+                "command_contains": args.command_contains,
+                "error_contains": args.error_contains,
             },
         )
         print(text)
