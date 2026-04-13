@@ -2,11 +2,15 @@
 
 `codex-mem` is a local-first Codex plugin for searching prior Codex sessions on
 your machine. It was conceptually inspired by
-[`claude-mem`](https://github.com/thedotmack/claude-mem), but it is built for a
-Codex-only workflow and uses only Python's standard library.
+[`claude-mem`](https://github.com/thedotmack/claude-mem), but it is built with
+Codex for a personal Codex-only workflow and uses only Python's standard
+library.
 
 This repository is intended to be a clean-room implementation, not a fork of
 `claude-mem`. See [NOTICE.md](./NOTICE.md) for the provenance note.
+
+No source code, assets, or directories from `claude-mem` are included in this
+repository.
 
 ## What It Does
 
