@@ -5,6 +5,7 @@ import json
 import sys
 from typing import Any
 
+from dashboard_server import serve_dashboard
 from memory_store import (
     get_session,
     get_startup_context,
@@ -735,6 +736,13 @@ def build_cli() -> argparse.ArgumentParser:
     last_time_parser.add_argument("--command-contains")
     last_time_parser.add_argument("--error-contains")
 
+    dashboard_parser = subparsers.add_parser("serve-ui", help="Serve the local Codex Mem dashboard")
+    dashboard_parser.add_argument("--host", default="127.0.0.1")
+    dashboard_parser.add_argument("--port", type=int, default=37801)
+    dashboard_parser.add_argument("--cwd")
+    dashboard_parser.add_argument("--project-group")
+    dashboard_parser.add_argument("--open-browser", action="store_true")
+
     return parser
 
 
@@ -896,6 +904,15 @@ def main() -> int:
         )
         print(text)
         return 0
+
+    if args.command == "serve-ui":
+        return serve_dashboard(
+            host=args.host,
+            port=args.port,
+            cwd=args.cwd,
+            project_group=args.project_group,
+            open_browser=args.open_browser,
+        )
 
     parser.print_help()
     return 1

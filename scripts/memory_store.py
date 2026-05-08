@@ -31,6 +31,7 @@ TITLE_FALLBACK = "Untitled session"
 DEFAULT_MATCH_RADIUS = 220
 
 WHITESPACE_RE = re.compile(r"\s+")
+INVALID_FILENAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 ENV_BLOCK_RE = re.compile(r"<environment_context>.*?</environment_context>", re.DOTALL)
 XML_TAG_RE = re.compile(r"</?[^>]+>")
 FILE_TOKEN_RE = re.compile(
@@ -135,6 +136,18 @@ def clean_user_text(text: str) -> str:
     return collapse_whitespace(" ".join(lines))
 
 
+def normalize_session_title(text: str) -> str:
+    value = clean_user_text(text)
+    value = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", value)
+    value = value.replace("`", "")
+    value = re.sub(r"^[#*\-]+\s*", "", value)
+    value = re.sub(r"^files mentioned by the user:\s*", "", value, flags=re.IGNORECASE)
+    value = collapse_whitespace(value)
+    if value.lower().startswith("agents.md instructions for "):
+        return ""
+    return value
+
+
 def unique_preserve_order(items: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -152,10 +165,41 @@ def safe_slug(text: str, fallback: str = "note") -> str:
     return value or fallback
 
 
+def safe_note_name(started_at: str, title: str, cwd: str, session_id: str) -> str:
+    timestamp = ""
+    if started_at:
+        normalized = started_at.replace("Z", "+00:00")
+        try:
+            timestamp = datetime.fromisoformat(normalized).strftime("%Y-%m-%d %H-%M-%S")
+        except ValueError:
+            timestamp = started_at.split("T", 1)[0]
+
+    project_name = collapse_whitespace(Path(cwd).name) if cwd else ""
+    title_text = normalize_session_title(title) if title else ""
+    if not title_text:
+        title_text = TITLE_FALLBACK
+    parts = [timestamp]
+    if project_name and project_name.lower() not in title_text.lower():
+        parts.append(project_name)
+    parts.append(title_text)
+
+    note_name = " - ".join(part for part in parts if part)
+    note_name = INVALID_FILENAME_RE.sub(" ", note_name)
+    note_name = collapse_whitespace(note_name).strip(" .")
+    if len(note_name) > 120:
+        note_name = trim_text(note_name, 120).rstrip(". ")
+    return note_name or safe_slug(session_id[:8] or session_id or "session", "session")
+
+
 def get_runtime_settings() -> dict[str, Any]:
     groups_path = Path(
         os.environ.get("CODEX_MEM_PROJECT_GROUPS_PATH", str(DEFAULT_GROUPS_PATH))
     ).expanduser()
+    extra_session_roots = [
+        Path(item).expanduser()
+        for item in re.split(r"[;\n]", os.environ.get("CODEX_MEM_EXTRA_SESSION_ROOTS", ""))
+        if item.strip()
+    ]
     chroma_path = Path(
         os.environ.get("CODEX_MEM_CHROMA_PATH", str(DEFAULT_CHROMA_PATH))
     ).expanduser()
@@ -170,9 +214,23 @@ def get_runtime_settings() -> dict[str, Any]:
         "chroma_port": int(os.environ.get("CODEX_MEM_CHROMA_PORT", "8000")),
         "chroma_path": chroma_path,
         "groups_path": groups_path,
+        "session_roots": unique_paths([SESSION_ROOT, *extra_session_roots]),
         "obsidian_vault_path": obsidian_vault_path,
         "obsidian_folder": os.environ.get("CODEX_MEM_OBSIDIAN_FOLDER", DEFAULT_OBSIDIAN_FOLDER).strip() or DEFAULT_OBSIDIAN_FOLDER,
     }
+
+
+def unique_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    ordered: list[Path] = []
+    for path in paths:
+        resolved = path.expanduser()
+        key = str(resolved).lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        ordered.append(resolved)
+    return ordered
 
 
 @lru_cache(maxsize=1)
@@ -254,7 +312,7 @@ def obsidian_enabled() -> bool:
     return bool(get_runtime_settings()["enable_obsidian"])
 
 
-def note_location(started_at: str, session_id: str) -> tuple[str, str]:
+def note_location(started_at: str, session_id: str, title: str, cwd: str) -> tuple[str, str]:
     if not obsidian_enabled():
         return "", ""
     year = "unknown"
@@ -264,7 +322,8 @@ def note_location(started_at: str, session_id: str) -> tuple[str, str]:
         if len(parts) >= 2:
             year = parts[0]
             month = parts[1]
-    note_path = obsidian_root_dir() / "Sessions" / year / month / f"{session_id}.md"
+    note_name = safe_note_name(started_at, title, cwd, session_id)
+    note_path = obsidian_root_dir() / "Sessions" / year / month / f"{note_name}.md"
     return str(note_path), obsidian_uri_for_path(note_path)
 
 
@@ -551,9 +610,12 @@ def fts_available(conn: sqlite3.Connection) -> bool:
 
 
 def iter_session_files() -> list[Path]:
-    if not SESSION_ROOT.exists():
-        return []
-    return sorted(SESSION_ROOT.rglob("*.jsonl"))
+    files: list[Path] = []
+    for root in get_runtime_settings()["session_roots"]:
+        if not root.exists():
+            continue
+        files.extend(root.rglob("*.jsonl"))
+    return sorted(unique_paths(files), key=lambda path: str(path).lower())
 
 
 def extract_content_texts(content: Any) -> list[str]:
@@ -697,11 +759,13 @@ def parse_session_file(path: Path) -> ParsedSession | None:
             path.stat().st_mtime, tz=timezone.utc
         ).replace(microsecond=0).isoformat()
 
-    meaningful_user_messages = [
-        message["text"]
-        for message in messages
-        if message["role"] == "user" and message["text"]
-    ]
+    meaningful_user_messages: list[str] = []
+    for message in messages:
+        if message["role"] != "user" or not message["text"]:
+            continue
+        title_candidate = normalize_session_title(message["text"])
+        if title_candidate:
+            meaningful_user_messages.append(title_candidate)
     title_source = meaningful_user_messages[0] if meaningful_user_messages else ""
     title = trim_text(title_source, 120) if title_source else ""
     if not title:
@@ -725,7 +789,7 @@ def parse_session_file(path: Path) -> ParsedSession | None:
     ]
     error_signatures = extract_error_signatures(error_source_texts)
     decision_summary = choose_decision_text(assistant_messages)
-    obsidian_note_path, obsidian_uri = note_location(started_at, session_id)
+    obsidian_note_path, obsidian_uri = note_location(started_at, session_id, title, cwd)
 
     summary_parts: list[str] = []
     if meaningful_user_messages:
@@ -1103,6 +1167,8 @@ def rebuild_index(force: bool = False) -> dict[str, int]:
     clear_group_cache()
     removed_session_ids: list[str] = []
     removed_note_paths: list[str] = []
+    renamed_note_paths: list[str] = []
+    expected_note_paths: list[str] = []
     parsed_updates: list[ParsedSession] = []
     with connect_db() as conn:
         files = iter_session_files()
@@ -1139,17 +1205,25 @@ def rebuild_index(force: bool = False) -> dict[str, int]:
             parsed = parse_session_file(path)
             if parsed is None:
                 continue
+            previous_note_path = str(existing["obsidian_note_path"] or "") if existing is not None else ""
+            if previous_note_path and previous_note_path != parsed.obsidian_note_path:
+                renamed_note_paths.append(previous_note_path)
             upsert_session(conn, parsed, sync_chroma=False)
             parsed_updates.append(parsed)
             updated += 1
 
         conn.commit()
         total = conn.execute("SELECT COUNT(*) AS count FROM sessions").fetchone()["count"]
+        expected_note_paths = [
+            str(row["obsidian_note_path"] or "")
+            for row in conn.execute("SELECT obsidian_note_path FROM sessions").fetchall()
+        ]
 
     delete_sessions_from_chroma(removed_session_ids)
-    for note_path in removed_note_paths:
+    for note_path in unique_preserve_order([*removed_note_paths, *renamed_note_paths]):
         delete_session_from_obsidian(note_path)
     sync_sessions_to_obsidian(parsed_updates)
+    cleanup_stale_obsidian_session_notes(expected_note_paths)
     write_obsidian_index_notes()
     sync_sessions_to_chroma(parsed_updates)
     return {
@@ -1887,6 +1961,7 @@ def build_session_note_markdown(parsed: ParsedSession) -> str:
     frontmatter = [
         "---",
         f"session_id: {parsed.session_id}",
+        f"aliases: {json.dumps([parsed.session_id])}",
         f"started_at: {parsed.started_at}",
         f"cwd: \"{parsed.cwd.replace('\"', '\\\"')}\"",
         f"source: {parsed.source}",
@@ -1964,6 +2039,23 @@ def delete_session_from_obsidian(note_path: str) -> None:
     path.unlink(missing_ok=True)
 
 
+def cleanup_stale_obsidian_session_notes(expected_note_paths: list[str]) -> None:
+    if not obsidian_enabled():
+        return
+    sessions_root = obsidian_root_dir() / "Sessions"
+    if not sessions_root.exists():
+        return
+    expected = {
+        str(Path(note_path))
+        for note_path in expected_note_paths
+        if note_path
+    }
+    for path in sessions_root.rglob("*.md"):
+        if str(path) in expected:
+            continue
+        path.unlink(missing_ok=True)
+
+
 def write_obsidian_index_notes() -> None:
     if not obsidian_enabled():
         return
@@ -1986,7 +2078,12 @@ def write_obsidian_index_notes() -> None:
         cwd = str(row["cwd"] or "")
         groups = ", ".join(row_to_groups(row))
         if note_path:
-            lines.append(f"- [[{Path(note_path).stem}|{title}]]")
+            note_link = Path(note_path)
+            try:
+                wiki_target = note_link.relative_to(root).with_suffix("").as_posix()
+            except ValueError:
+                wiki_target = note_link.stem
+            lines.append(f"- [[{wiki_target}|{title}]]")
         else:
             lines.append(f"- {title}")
         lines.append(f"  started_at: {started_at}")
@@ -2026,6 +2123,7 @@ def memory_status() -> dict[str, Any]:
         "total_messages": total_messages,
         "latest_session_started_at": latest["started_at"] if latest else None,
         "session_root": str(SESSION_ROOT),
+        "session_roots": [str(path) for path in get_runtime_settings()["session_roots"]],
         "database_path": str(DB_PATH),
         "project_groups_path": str(get_runtime_settings()["groups_path"]),
         "project_group_count": len(list_project_groups()),
@@ -2043,13 +2141,13 @@ def write_project_groups_example(force: bool = False) -> Path:
     example = {
         "groups": [
             {
-                "name": "biodesign-samples",
-                "description": "Merge serum, plasma, and saliva related workspaces into one memory space.",
+                "name": "research-project",
+                "description": "Merge related workspaces into one memory space.",
                 "patterns": [
-                    "OneDrive - Arizona State University\\Biodesign\\Serum, Plasma and Saliva samples\\raw",
-                    "OneDrive - Arizona State University\\Biodesign\\Serum, Plasma and Saliva samples\\processed"
+                    "OneDrive - Example Organization\\Research\\Project\\raw",
+                    "OneDrive - Example Organization\\Research\\Project\\processed"
                 ],
-                "aliases": ["biodesign", "samples"]
+                "aliases": ["research", "project"]
             }
         ]
     }

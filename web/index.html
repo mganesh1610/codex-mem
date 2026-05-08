@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codex Mem Dashboard</title>
+    <meta
+      name="description"
+      content="Local Codex memory dashboard with project context selection and file path bundling."
+    >
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail project-sidebar">
+        <div class="project-nav-head">
+          <button class="nav-title-button" type="button" aria-label="Project memory list">
+            <span>Projects</span>
+            <span class="chevron" aria-hidden="true"></span>
+          </button>
+          <div class="nav-toolset" aria-label="Project tools">
+            <button class="nav-icon" id="allProjectsButton" type="button" aria-label="Show all projects"></button>
+            <button class="nav-icon filter-icon" id="currentFolderButton" type="button" aria-label="Use current folder"></button>
+            <button class="nav-icon add-icon" id="overviewButton" type="button" aria-label="Refresh overview"></button>
+          </div>
+        </div>
+
+        <label class="startup-toggle">
+          <input id="startupToggle" type="checkbox">
+          <span class="switch-visual" aria-hidden="true"></span>
+          <span class="startup-copy">
+            <strong>Startup context</strong>
+            <small id="startupStatusText">Manual select</small>
+            <small id="companionStatusText">Companion not connected</small>
+          </span>
+        </label>
+
+        <p id="railStatusLine" class="muted-copy nav-status">Loading local memory index...</p>
+
+        <div class="project-list-wrap">
+          <div class="project-count-row">
+            <button id="useSelectedProjectsButton" class="project-use-selected" type="button" disabled>Use selected</button>
+            <span id="projectCountPill" class="soft-pill">0 projects</span>
+          </div>
+          <div id="projectList" class="project-list"></div>
+          <div id="projectsEmpty" class="empty-state" hidden>
+            No indexed projects found yet.
+          </div>
+        </div>
+
+        <details class="rail-panel scope-panel">
+          <summary class="section-head">
+            <span>Filters</span>
+            <span class="soft-pill" id="scopePill">All projects</span>
+          </summary>
+
+          <div class="scope-actions">
+            <button class="button secondary" type="button" data-scope-action="all">All projects</button>
+            <button class="button secondary" type="button" data-scope-action="local">This folder</button>
+          </div>
+
+          <label class="field">
+            <span>Current folder</span>
+            <input id="cwdInput" type="text" placeholder="Leave blank for all indexed Codex chats">
+          </label>
+
+          <label class="field">
+            <span>Project group</span>
+            <select id="projectGroupSelect"></select>
+          </label>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Result limit</span>
+              <input id="limitInput" type="number" min="1" max="25" value="8">
+            </label>
+            <label class="field">
+              <span>Lookback days</span>
+              <input id="daysInput" type="number" min="1" placeholder="30">
+            </label>
+          </div>
+
+          <details class="filter-stack">
+            <summary>Precision filters</summary>
+
+            <label class="field">
+              <span>Tool</span>
+              <input id="toolInput" type="text" placeholder="shell_command, apply_patch">
+            </label>
+            <label class="field">
+              <span>File</span>
+              <input id="fileInput" type="text" placeholder="scripts/mcp_server.py">
+            </label>
+            <label class="field">
+              <span>Command</span>
+              <input id="commandInput" type="text" placeholder="pytest -q">
+            </label>
+            <label class="field">
+              <span>Error</span>
+              <input id="errorInput" type="text" placeholder="database is locked">
+            </label>
+          </details>
+
+          <div class="action-stack">
+            <button id="relatedButton" class="button secondary">Related sessions</button>
+            <button id="summaryButton" class="button tertiary">Summarize last time</button>
+          </div>
+        </details>
+
+        <details class="rail-panel archive-panel">
+          <summary class="section-head archive-summary-head">
+            <span>Archive</span>
+            <span class="soft-pill" id="noteCountPill">0 notes</span>
+          </summary>
+          <p id="archiveSummary" class="muted-copy">Obsidian export not loaded.</p>
+          <div class="action-stack compact">
+            <a id="obsidianIndexLink" class="button secondary" href="#">Open Obsidian index</a>
+            <button id="copyVaultPathButton" class="button tertiary">Copy vault path</button>
+          </div>
+        </details>
+      </aside>
+
+      <main class="workspace">
+        <section class="top-panel">
+          <div>
+            <p class="surface-kicker">Workspace</p>
+            <h2 id="heroScopeTitle">Memory index loading</h2>
+            <p id="heroScopeText" class="muted-copy">Current folder scope will appear here.</p>
+          </div>
+          <div class="top-actions">
+            <button id="loadErrorsButton" class="button secondary">Error snippets</button>
+            <button id="recentButton" class="button secondary">Recent sessions</button>
+            <button id="copyBundleButton" class="button primary" type="button">Copy for chat</button>
+          </div>
+        </section>
+
+        <section class="metric-grid">
+          <article class="metric-tile">
+            <p class="metric-label">Indexed sessions</p>
+            <p id="sessionsMetric" class="metric-value">0</p>
+          </article>
+          <article class="metric-tile">
+            <p class="metric-label">Transcript lines</p>
+            <p id="messagesMetric" class="metric-value">0</p>
+          </article>
+          <article class="metric-tile">
+            <p class="metric-label">Project groups</p>
+            <p id="groupsMetric" class="metric-value">0</p>
+          </article>
+          <article class="metric-tile">
+            <p class="metric-label">Indexed projects</p>
+            <p id="projectsMetric" class="metric-value">0</p>
+          </article>
+        </section>
+
+        <section class="surface search-surface">
+          <div class="search-head">
+            <div>
+              <p class="surface-kicker">Search</p>
+              <h3>Find memory, snippets, files, and decisions</h3>
+            </div>
+            <div class="mode-strip" id="modeStrip">
+              <button class="mode-pill is-active" data-mode="overview">Overview</button>
+              <button class="mode-pill" data-mode="hybrid">Hybrid</button>
+              <button class="mode-pill" data-mode="keyword">Keyword</button>
+              <button class="mode-pill" data-mode="snippets">Snippets</button>
+              <button class="mode-pill" data-mode="summary">Last Time</button>
+            </div>
+          </div>
+
+          <form id="queryForm" class="query-form">
+            <label class="query-input">
+              <span class="sr-only">Search memory</span>
+              <input id="queryInput" type="text" placeholder="Search task, file, error, or decision">
+            </label>
+            <button class="button primary" type="submit">Run query</button>
+          </form>
+        </section>
+
+        <section class="content-grid">
+          <div class="content-column">
+            <article class="surface summary-surface">
+              <div class="surface-head">
+                <div>
+                  <p class="surface-kicker">Brief</p>
+                  <h3 id="summaryHeadline">Current folder memory is ready.</h3>
+                </div>
+                <span id="resultCount" class="soft-pill">0 results</span>
+              </div>
+              <p id="summaryText" class="summary-copy">
+                Select memory rows and local files to build a compact chat bundle.
+              </p>
+              <div id="facetChips" class="chip-row"></div>
+            </article>
+
+            <article class="surface">
+              <div class="surface-head">
+                <div>
+                  <p class="surface-kicker">Memory</p>
+                  <h3 id="resultsTitle">Current folder sessions</h3>
+                </div>
+              </div>
+              <div id="resultsList" class="results-list"></div>
+              <div id="resultsEmpty" class="empty-state" hidden>
+                No sessions matched this scope.
+              </div>
+            </article>
+
+            <article class="surface">
+              <div class="surface-head">
+                <div>
+                  <p class="surface-kicker">Exact recall</p>
+                  <h3>Transcript snippets</h3>
+                </div>
+              </div>
+              <div id="snippetList" class="snippet-list"></div>
+              <div id="snippetsEmpty" class="empty-state" hidden>
+                No transcript snippets loaded yet.
+              </div>
+            </article>
+          </div>
+
+          <aside class="side-stack">
+            <section class="surface context-panel artifact-card">
+              <div class="surface-head artifact-head">
+                <div>
+                  <p class="surface-kicker">Context Pack</p>
+                  <h3>Artifacts</h3>
+                </div>
+                <span id="contextSelectionPill" class="soft-pill">0 selected</span>
+              </div>
+
+              <div id="selectedPreview" class="selected-preview">
+                No memory or files selected.
+              </div>
+              <div class="agent-sync-row">
+                <span id="selectedContextStatusText">Agent startup not armed</span>
+                <button id="armSelectedContextButton" class="text-link" type="button">Arm now</button>
+              </div>
+
+              <div id="handoffPanel" class="handoff-panel" hidden>
+                <div class="surface-head">
+                  <div>
+                    <p class="surface-kicker">Chat handoff</p>
+                    <h3 id="handoffTitle">Bundle ready</h3>
+                  </div>
+                  <button id="hideHandoffButton" class="icon-button" type="button" aria-label="Hide handoff panel">x</button>
+                </div>
+                <textarea id="handoffText" readonly aria-label="Text to paste into Codex chat"></textarea>
+                <div class="builder-actions">
+                  <button id="selectHandoffButton" class="button secondary" type="button">Select text</button>
+                </div>
+              </div>
+
+              <label class="field asset-filter">
+                <span>Filter files</span>
+                <input id="assetSearchInput" type="text" placeholder="project file, image, path, extension">
+              </label>
+
+              <div class="mini-tabs" id="assetModeStrip">
+                <button class="mini-tab is-active" data-asset-mode="all">All</button>
+                <button class="mini-tab" data-asset-mode="image">Images</button>
+                <button class="mini-tab" data-asset-mode="existing">Existing</button>
+                <button class="mini-tab" data-asset-mode="selected">Selected</button>
+              </div>
+
+              <div id="assetList" class="asset-list"></div>
+              <div class="sources-block">
+                <div class="sources-rule"></div>
+                <p class="sources-title">Sources</p>
+                <div class="source-row">
+                  <span class="source-icon" aria-hidden="true"></span>
+                  <span>Referenced files/images</span>
+                  <span id="assetStatsPill" class="source-count">0 files</span>
+                </div>
+                <div class="source-row">
+                  <span class="source-icon cloud" aria-hidden="true"></span>
+                  <span>Synced roots</span>
+                  <span id="sourceRootsPill" class="source-count">0 roots</span>
+                </div>
+              </div>
+              <div class="builder-actions">
+                <button id="clearSelectionButton" class="button tertiary">Clear selection</button>
+              </div>
+            </section>
+
+            <section class="surface inspector">
+              <div class="surface-head">
+                <div>
+                  <p class="surface-kicker">Inspector</p>
+                  <h3>Session detail</h3>
+                </div>
+              </div>
+              <div id="detailPane" class="detail-pane empty">
+                Pick a session or snippet to inspect files touched, commands, errors, and transcript lines.
+              </div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <div id="startupCoach" class="startup-coach" hidden>
+      <div class="coach-copy">
+        <p class="surface-kicker">Startup context</p>
+        <h2 id="startupCoachTitle">Context ready</h2>
+        <p id="startupCoachText">Auto-selected memory is ready to paste into chat.</p>
+      </div>
+      <label class="coach-toggle">
+        <input id="startupCoachToggle" type="checkbox">
+        <span class="switch-visual" aria-hidden="true"></span>
+        <span>Include</span>
+      </label>
+      <div class="coach-actions">
+        <button id="startupCoachCopyButton" class="button primary" type="button">Copy + close</button>
+        <button id="startupCoachSidebarButton" class="button secondary" type="button">Sidebar</button>
+        <button id="startupCoachDismissButton" class="icon-button" type="button" aria-label="Close startup context pop-up">x</button>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

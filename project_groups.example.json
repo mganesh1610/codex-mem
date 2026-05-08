@@ -1,15 +1,15 @@
 {
   "groups": [
     {
-      "name": "biodesign-samples",
-      "description": "Merge related serum, plasma, and saliva workspaces into one memory space.",
+      "name": "research-project",
+      "description": "Merge related workspaces into one memory space.",
       "patterns": [
-        "OneDrive - Arizona State University\\Biodesign\\Serum, Plasma and Saliva samples\\raw",
-        "OneDrive - Arizona State University\\Biodesign\\Serum, Plasma and Saliva samples\\processed"
+        "OneDrive - Example Organization\\Research\\Project\\raw",
+        "OneDrive - Example Organization\\Research\\Project\\processed"
       ],
       "aliases": [
-        "biodesign",
-        "samples"
+        "research",
+        "project"
       ]
     }
   ]

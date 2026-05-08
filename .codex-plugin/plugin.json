@@ -1,7 +1,7 @@
 {
   "name": "codex-mem",
-  "version": "0.3.0",
-  "description": "Local-first project memory for Codex with SQLite, Chroma, transcript snippets, and Obsidian markdown export.",
+  "version": "0.4.0",
+  "description": "Local-first project memory for Codex with SQLite, Chroma, transcript snippets, Obsidian markdown export, and a local dashboard.",
   "author": {
     "name": "Ganeshkumar Marimuthu"
   },
@@ -18,8 +18,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Mem",
-    "shortDescription": "Project memory for Codex with hybrid search, exact snippets, and Obsidian notes.",
-    "longDescription": "Codex Mem builds a local project-memory system over ~/.codex/sessions with fast SQLite retrieval, optional Chroma semantic search, exact transcript snippet search, project-group recall, last-time summaries, and automatic Obsidian-compatible markdown export.",
+    "shortDescription": "Project memory for Codex with hybrid search, exact snippets, Obsidian notes, and a dashboard.",
+    "longDescription": "Codex Mem builds a local project-memory system over ~/.codex/sessions with fast SQLite retrieval, optional Chroma semantic search, exact transcript snippet search, project-group recall, last-time summaries, a standalone local dashboard, and automatic Obsidian-compatible markdown export.",
     "developerName": "Ganeshkumar Marimuthu",
     "category": "Productivity",
     "capabilities": [
